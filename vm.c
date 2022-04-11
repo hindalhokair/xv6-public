@@ -32,14 +32,19 @@ seginit(void)
 // Return the address of the PTE in page table pgdir
 // that corresponds to virtual address va.  If alloc!=0,
 // create any required page table pages.
+
 static pte_t *
 walkpgdir(pde_t *pgdir, const void *va, int alloc)
 {
+  //empty pointers to pte and page directpory
   pde_t *pde;
   pte_t *pgtab;
 
+//PDX takes in the virtual address it returns an address of the page table
+// pgdir[page table] will return the page directory entry
   pde = &pgdir[PDX(va)];
-  if(*pde & PTE_P){
+  if(*pde & PTE_P){ //if presesnt
+
     pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
   } else {
     // No page table at this pde, so make one (if caller didn't forbid it)
@@ -392,7 +397,133 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   return 0;
 }
 
-//PAGEBREAK!
+int
+page_checks(void *addr, int len)
+{
+  // Get current process
+  struct proc *curproc = myproc();
+
+  // Check if addr is not page aligned
+  if(((uint) addr % PGSIZE )  != 0)
+  {
+    cprintf("address not alligned to page start\n");
+    return -1;
+  }
+  // Check that address is within process allocaed memory
+  if((uint)addr < curproc->vbase || (uint)addr + len*PGSIZE > curproc->vlimit )
+  {
+    cprintf("address is outside of valid address space\n");
+    return -1;
+  }
+  // Check if len is valid
+   if(len <= 0)
+  {
+    cprintf("invalid length\n");
+    return -1;
+  }
+  return 0;
+}
+
+int
+mprotect(void *addr, int len)
+{
+  // Get current process
+  struct proc *curproc = myproc();
+
+  if(page_checks(addr, len) == -1)
+  {
+    return -1;
+  }
+
+  pte_t *pte;
+  int address;
+  
+  // Strating with our address i, we will add pages of PGSIZE until we reach our maximum size from that address
+  for (address = (uint) addr; address < (len*PGSIZE + (uint) addr ); address+= PGSIZE)
+  {
+    // Return the address of the PTE in page table pgdir that corresponds to virtual address (address).
+    pte = walkpgdir(curproc->pgdir,(char*) address, 0); 
+
+    // If walkpgdir fails due to lack of allocated memory, panic.
+    if(pte == 0) 
+      panic("mprotect");
+
+    // Check is the page is present
+    if((*pte & PTE_P) == 0){
+      panic("mprotect");
+    }
+
+    // Check if the page is accessible to the user.
+    if((*pte & PTE_U) != 0)
+    {
+      // Set write bit to 0.
+      *pte = (*pte) & (~PTE_W) ; 
+    } 
+    // If page is not asseccible to user, return -1.
+    else
+    {
+      cprintf("page not accessible to the user\n");
+      return -1;
+    }
+  }
+
+  // Ensure that the older TLB entries are flushed. 
+  lcr3(V2P(curproc->pgdir));  
+
+return 0;
+}
+
+int munprotect(void *addr, int len) 
+{
+  // Get current process
+  struct proc *curproc = myproc();
+
+  if(page_checks(addr, len) == -1)
+  {
+    return -1;
+  }
+
+  pte_t *pte;
+  int address;
+  
+  // Strating with our address i, we will add pages of PGSIZE until we reach our maximum size from that address
+  for (address = (uint) addr; address < (len*PGSIZE + (uint) addr ); address+= PGSIZE)
+  {
+    // Return the address of the PTE in page table pgdir that corresponds to virtual address (address).
+    pte = walkpgdir(curproc->pgdir,(char*) address, 0); 
+
+    // If walkpgdir fails due to lack of allocated memory, panic.
+    if(pte == 0) 
+      panic("munprotect");
+
+    // Check is the page is present
+    if((*pte & PTE_P) == 0){
+      panic("munprotect");
+    }
+
+    // Check if the page is accessible to the user.
+    if((*pte & PTE_U) != 0)
+    {
+      // Set write bit to 1.
+      *pte = (*pte) | (PTE_W) ; 
+    } 
+    // If page is not asseccible to user, return -1.
+    else
+    {
+      cprintf("page not accessible to the user\n");
+      return -1;
+    }
+
+  }
+
+  // Ensure that the older TLB entries are flushed. 
+  lcr3(V2P(curproc->pgdir));  
+  
+return 0;
+}
+
+
+//PAGEBREAK! 
 // Blank page.
 //PAGEBREAK!
 // Blank page.

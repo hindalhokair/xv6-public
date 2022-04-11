@@ -53,6 +53,9 @@ exec(char *path, char **argv)
       goto bad;
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
+    //sets a new value to vlimit to fit the info that is required; program header has all the stuff it needs to know about it
+    //memzr memory size
+    //vaddr the directory of the program we want to store
     if((vlimit = allocuvm(pgdir, vbase, vlimit, ph.vaddr + ph.memsz)) == 0)
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
@@ -66,6 +69,8 @@ exec(char *path, char **argv)
 
   // Allocate two pages at the next page boundary.
   // Make the first inaccessible.  Use the second as the user stack.
+  
+  //vlimit is amount of space we need, so we get pages based on that
   vlimit = PGROUNDUP(vlimit);
   vbase = PGSIZE;
   if((vlimit = allocuvm(pgdir, vbase, vlimit, vlimit + 2*PGSIZE)) == 0)
